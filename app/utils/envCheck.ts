@@ -4,6 +4,7 @@ export function checkRequiredEnvironmentVariables() {
 		'CALENDAR_REFRESH_TOKEN',
 		'CALENDAR_CLIENT_ID',
 		'CALENDAR_CLIENT_SECRET',
+		'CALENDAR_IDS',
 	]
 
 	const missingVars: string[] = []
