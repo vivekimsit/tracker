@@ -1,4 +1,5 @@
 import type { LoaderArgs } from '@remix-run/node'
+import { prisma } from '~/utils/db.server.ts'
 
 export type NowPlayingSong = {
 	album: string
@@ -35,33 +36,23 @@ export async function loader({ params }: LoaderArgs) {
 	return getNowPlaying()
 }
 
-const getAccessToken = async () => {
-	const response = await fetch(TOKEN_ENDPOINT, {
-		method: 'POST',
-		headers: {
-			Authorization: `Basic ${basic}`,
-			'Content-Type': 'application/x-www-form-urlencoded',
-		},
-		// @ts-ignore
-		body: new URLSearchParams({
-			grant_type: 'refresh_token',
-			refresh_token,
-		}),
-	})
-
-	const grant = (await response.json()) as TokenGrant
-	// console.log('Grant >>>', grant)
-	return grant
-}
-
 export const getNowPlaying = async (): Promise<SimplifiedTrackInfo | null> => {
-	const { access_token } = await getAccessToken()
-
-	const response = await fetch(NOW_PLAYING_ENDPOINT, {
-		headers: {
-			Authorization: `Bearer ${access_token}`,
-		},
-	})
+	let response
+	try {
+		const access_token = await getToken()
+		response = await fetch(NOW_PLAYING_ENDPOINT, {
+			headers: {
+				Authorization: `Bearer ${access_token}`,
+			},
+		})
+	} catch (error) {
+		const newToken = await refreshAccessToken()
+		response = await fetch(NOW_PLAYING_ENDPOINT, {
+			headers: {
+				Authorization: `Bearer ${newToken}`,
+			},
+		})
+	}
 
 	if (response.status === 204) {
 		console.log('No song is currently playing.')
@@ -75,6 +66,77 @@ export const getNowPlaying = async (): Promise<SimplifiedTrackInfo | null> => {
 		console.error('Error fetching now playing:', response.statusText)
 		return null
 	}
+}
+
+/**
+ * Update the access token by refreshing it
+ */
+/**
+ * Refresh the access token using a stored refresh token.
+ */
+const refreshAccessToken = async (): Promise<string> => {
+	const response = await requestTokenRefresh()
+
+	if (!response.ok) {
+		const errorDetails = (await response.json()) as ErrorResponse
+		throw new Error(
+			`Failed to refresh token. Error: ${errorDetails.error_description}`,
+		)
+	}
+
+	const grant = (await response.json()) as TokenGrant
+	await storeUpdatedToken(grant)
+
+	return grant.access_token
+}
+
+/**
+ * Request to refresh the token from the Google OAuth2 endpoint.
+ */
+const requestTokenRefresh = async () => {
+	return await fetch(TOKEN_ENDPOINT, {
+		method: 'POST',
+		headers: {
+			Authorization: `Basic ${basic}`,
+			'Content-Type': 'application/x-www-form-urlencoded',
+		},
+		// @ts-ignore
+		body: new URLSearchParams({
+			grant_type: 'refresh_token',
+			refresh_token,
+		}),
+	})
+}
+
+/**
+ * Store the updated access token in the database.
+ */
+const storeUpdatedToken = async (grant: TokenGrant) => {
+	const expiration = new Date(Date.now() + grant.expires_in * 1000 - 1000)
+	await prisma.oauthToken.upsert({
+		where: { refreshToken: refresh_token },
+		update: {
+			accessToken: grant.access_token,
+			expiration,
+		},
+		create: {
+			refreshToken: refresh_token!,
+			accessToken: grant.access_token,
+			expiration,
+		},
+	})
+}
+
+/**
+ * Fetch the OAuth token from the database
+ */
+const getToken = async (): Promise<string> => {
+	const token = await prisma.oauthToken.findUnique({
+		where: { refreshToken: refresh_token },
+	})
+	if (!token) throw new Error('No spotify access token found')
+
+	return token.accessToken
 }
 
 const extractTrackInfo = (
@@ -107,4 +169,9 @@ type SimplifiedTrackInfo = {
 	trackTitle: string
 	albumName: string
 	trackImageUrl: string
+}
+
+interface ErrorResponse {
+	error: string
+	error_description: string
 }
