@@ -48,9 +48,6 @@ let devBuild = build
 
 const app = express()
 
-const getHost = (req: { get: (key: string) => string | undefined }) =>
-	req.get('X-Forwarded-Host') ?? req.get('host') ?? ''
-
 app.use((req, res, next) => {
 	// Get the origin of the incoming request
 	const origin = req.get('origin')
@@ -71,6 +68,9 @@ app.use((req, res, next) => {
 	// Move to the next middleware
 	next()
 })
+
+const getHost = (req: { get: (key: string) => string | undefined }) =>
+	req.get('X-Forwarded-Host') ?? req.get('host') ?? ''
 
 // ensure HTTPS only (X-Forwarded-Proto comes from Fly)
 app.use((req, res, next) => {
