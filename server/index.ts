@@ -27,6 +27,11 @@ import sourceMapSupport from 'source-map-support'
 // definitely exist by the time the dev or prod server actually runs.
 import * as remixBuild from '../build/index.js'
 
+const allowedOrigins = [
+	'http://localhost:3000', // for local development
+	'https://www.vivekpoddar.com/', // production frontend
+]
+
 sourceMapSupport.install()
 installGlobals()
 
@@ -45,6 +50,27 @@ const app = express()
 
 const getHost = (req: { get: (key: string) => string | undefined }) =>
 	req.get('X-Forwarded-Host') ?? req.get('host') ?? ''
+
+app.use((req, res, next) => {
+	// Get the origin of the incoming request
+	const origin = req.get('origin')
+
+	if (!origin) {
+		return next()
+	}
+
+	// If the origin is in our list of allowed origins, set the appropriate headers
+	if (allowedOrigins.includes(origin)) {
+		res.setHeader('Access-Control-Allow-Origin', origin)
+	}
+
+	// Add other CORS headers here if necessary
+	res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
+	res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+	// Move to the next middleware
+	next()
+})
 
 // ensure HTTPS only (X-Forwarded-Proto comes from Fly)
 app.use((req, res, next) => {
