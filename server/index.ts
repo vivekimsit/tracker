@@ -29,7 +29,7 @@ import * as remixBuild from '../build/index.js'
 
 const allowedOrigins = [
 	'http://localhost:3000', // for local development
-	'https://www.vivekpoddar.com/', // production frontend
+	'https://www.vivekpoddar.com', // production frontend
 ]
 
 sourceMapSupport.install()
