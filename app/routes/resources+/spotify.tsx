@@ -54,6 +54,15 @@ export const getNowPlaying = async (): Promise<SimplifiedTrackInfo | null> => {
 		})
 	}
 
+	if (response.status === 401) {
+		const newToken = await refreshAccessToken()
+		response = await fetch(NOW_PLAYING_ENDPOINT, {
+			headers: {
+				Authorization: `Bearer ${newToken}`,
+			},
+		})
+	}
+
 	if (response.status === 204) {
 		console.log('No song is currently playing.')
 		return null
